@@ -66,6 +66,11 @@ fun App() {
             modifier = Modifier.fillMaxWidth(),
             minLines = 3
         )
+        Text(
+            "${prompt.length} karakter" + if (prompt.length > 800) " (terlalu panjang, coba dipersingkat)" else "",
+            style = MaterialTheme.typography.bodySmall,
+            color = if (prompt.length > 800) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+        )
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { picker.launch("image/*") }, enabled = !loading) {
@@ -119,6 +124,7 @@ fun App() {
 
 // Ganti alamat ini jika ingin memakai layanan lain.
 private const val BASE_URL = "https://image.pollinations.ai/prompt/"
+private const val UA = "Mozilla/5.0 (Linux; Android 13) TeksKeGambar/1.0"
 private const val UPLOAD_URL = "https://litterbox.catbox.moe/resources/internals/api.php"
 
 private fun enc(s: String) = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
@@ -143,6 +149,7 @@ private fun uploadTemp(photo: Bitmap): String {
     conn.connectTimeout = 30_000
     conn.readTimeout = 60_000
     conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+    conn.setRequestProperty("User-Agent", UA)
     try {
         conn.outputStream.use { os ->
             fun field(name: String, value: String) {
@@ -177,8 +184,16 @@ suspend fun generate(prompt: String, photo: Bitmap?): Bitmap = withContext(Dispa
     val conn = url.openConnection() as HttpURLConnection
     conn.connectTimeout = 30_000
     conn.readTimeout = 180_000
+    conn.setRequestProperty("User-Agent", UA)
     try {
-        if (conn.responseCode != 200) error("HTTP ${conn.responseCode}")
+        if (conn.responseCode != 200) {
+            val body = try {
+                conn.errorStream?.bufferedReader()?.readText()?.take(200)
+            } catch (e: Exception) {
+                null
+            }
+            error("HTTP ${conn.responseCode} ${body ?: ""}".trim())
+        }
         conn.inputStream.use { BitmapFactory.decodeStream(it) ?: error("Gambar tidak valid") }
     } finally {
         conn.disconnect()
